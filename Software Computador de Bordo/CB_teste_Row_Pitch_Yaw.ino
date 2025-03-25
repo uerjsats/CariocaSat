@@ -54,10 +54,6 @@ Adafruit_MPU6050 mpu;     // Objeto do sensor MPU6050 (GY-521)
 
 unsigned long startTime;
 
-float yaw = 0.0;
-unsigned long lastTime = 0;
-
-
 class EE24CXXX {
 private:
     byte _device_address;
@@ -147,7 +143,6 @@ struct sensorsData {
 
     float roll;
     float pitch;
-    float yaw;
 };
 
 void setup() {
@@ -215,22 +210,6 @@ void loop() {
     dados.roll = atan2(dados.accelY, dados.accelZ) * 180.0 / PI;
     dados.pitch = atan2(-dados.accelX, sqrt(dados.accelY * dados.accelY + dados.accelZ * dados.accelZ)) * 180.0 / PI;
 
-    unsigned long currentTime = millis();
-    float deltaTime = (currentTime - lastTime) / 1000.0; // Tempo em segundos
-    lastTime = currentTime;
-
-    // Conversão correta para graus por segundo
-    float gyroZ = g.gyro.z * 57.2958; // Converte rad/s para graus/s
-
-    // Atualiza o yaw integrando a velocidade angular
-    yaw += gyroZ * deltaTime;
-
-    // Mantém yaw dentro de -180 a +180 graus (opcional)
-    if (yaw > 180.0) yaw -= 360.0;
-    if (yaw < -180.0) yaw += 360.0;
-
-    dados.yaw = yaw;
-
     printSensorsData(dados);
 
     if (currentAddress >= 1484) {
@@ -263,8 +242,6 @@ void loop() {
     currentAddress += 4;
     eeprom.write(currentAddress, dados.pitch);
     currentAddress += 4;
-    eeprom.write(currentAddress, dados.yaw);
-    currentAddress += 4;
 
     if (lora_idle == true) {
         delay(1000);
@@ -273,7 +250,7 @@ void loop() {
         dados.temperatureDHT, dados.humidityDHT, dados.altitude,
         dados.latitude, dados.longitude,
         dados.accelX, dados.accelY, dados.accelZ, 
-        dados.roll, dados.pitch, dados.yaw, txNumber);
+        dados.roll, dados.pitch, txNumber);
 
         Radio.Send((uint8_t *)txpacket, strlen(txpacket)); // send the package out
         lora_idle = false;
@@ -305,8 +282,7 @@ void printSensorsData(struct sensorsData dados) {
     Serial.print(dados.sats); Serial.print(":");
     Serial.print(dados.accelX); Serial.print(":");
     Serial.print(dados.accelY); Serial.print(":");
-    Serial.println(dados.accelZ);Serial.print(":");
-    Serial.print(":"); Serial.print(dados.roll);
-    Serial.print(":"); Serial.println(dados.pitch);
-    Serial.print(dados.yaw);
+    Serial.print(dados.accelZ); Serial.print(":");
+    Serial.print(dados.roll); Serial.print(":");
+    Serial.println(dados.pitch); 
 }
