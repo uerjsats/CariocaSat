@@ -133,9 +133,9 @@ void loop() {
     // Verifica entrada do monitor serial
     if (Serial.available()) {
         char input = Serial.read();
-        if (input == '1') {
-            sendLoRaMessage("Teste enviado!");
-        }
+        
+        sendLoRaMessage(input);
+        
     }
 
     // Evita que o watchdog reinicie o dispositivo
