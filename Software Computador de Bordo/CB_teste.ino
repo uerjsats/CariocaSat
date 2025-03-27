@@ -156,7 +156,7 @@ void setup() {
         Serial.println("Erro ao inicializar o MPU6050!");
     }
 
-    startTime = 0;
+    startTime = millis();
 
     Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
 
@@ -236,7 +236,7 @@ void loop() {
     if (lora_idle == true) {
         delay(1000);
         txNumber += 0.01;
-        sprintf(txpacket, "%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f:%0.2f",
+        sprintf(txpacket, "%.2f:%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f:%0.2f", dados.seconds,
                 dados.temperatureDHT, dados.humidityDHT, dados.altitude,
                 dados.latitude, dados.longitude,
                 dados.accelX, dados.accelY, dados.accelZ, txNumber);
