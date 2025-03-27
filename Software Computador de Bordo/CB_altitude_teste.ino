@@ -119,31 +119,14 @@ template <class T> int EE24CXXX::read(unsigned int eeaddress, T &value) {
     return sizeof(T);
 }
 
-void printSensorsData(struct sensorsData dados) {
-    Serial.print(dados.seconds); Serial.print(":");
-    Serial.print(dados.temperatureBME); Serial.print(":");
-    Serial.print(dados.umidadeDHT); Serial.print(":");
-    Serial.print(dados.pressao); Serial.print(":");
-    Serial.print(dados.altitude); Serial.print(":");
-    Serial.print(dados.latitude); Serial.print(":");
-    Serial.print(dados.longitude); Serial.print(":");
-    Serial.print(dados.sats); Serial.print(":");
-    Serial.print(dados.accelX); Serial.print(":");
-    Serial.print(dados.accelY); Serial.print(":");
-    Serial.println(dados.accelZ);
-}
-
 EE24CXXX eeprom(0x50);
 int currentAddress = 0;
-bool canRecordEEPROM = 0;
 
 struct sensorsData {
-    float seconds;
+    int seconds;
 
-    float temperatureBME;
     float temperatureDHT;
 
-    float humidityBME;
     float humidityDHT;
 
     float pressure;
@@ -201,17 +184,14 @@ void loop() {
     unsigned long elapsedTime = (millis() - startTime) / 1000;
     dados.seconds = elapsedTime;
 
-    dados.temperatureBME = bme.readTemperature();
     dados.temperatureDHT = dht.readTemperature();
     if(isnan(dados.temperatureDHT)) {dados.temperatureDHT = 0.0;}
 
-    dados.humidityBME = bme.readHumidity();
     dados.humidityDHT = dht.readHumidity();
     if(isnan(dados.humidityDHT)) {dados.humidityDHT = 0.0;}
 
     dados.pressure = bme.readPressure() / 100.0F;
     dados.altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
-    if(altitude >= 20) {canRecordEEPROM = 1}; // Verifica altitude p gravação
 
     dados.latitude = gps.location.lat();
     dados.longitude = gps.location.lng();
@@ -230,10 +210,10 @@ void loop() {
         currentAddress = 0; // Reseta após atingir a capacidade máxima
     }
 
-    if(canRecordEEPROM) {
+    if (dados.altitude >= 21.0) {
         eeprom.write(currentAddress, dados.seconds);
         currentAddress += 4;
-        eeprom.write(currentAddress, dados.temperatureBME);
+        eeprom.write(currentAddress, dados.temperatureDHT);
         currentAddress += 4;
         eeprom.write(currentAddress, dados.humidityDHT);
         currentAddress += 4;
@@ -253,13 +233,20 @@ void loop() {
         currentAddress += 4;
         eeprom.write(currentAddress, dados.accelZ);
         currentAddress += 4;
+
+        Serial.print("Gravando na EEPROM: ");
+        Serial.println(dados.altitude, 2);
+    }
+    else {
+        Serial.print("Não está gravando na EEPROM: ");
+        Serial.println(dados.altitude, 2);
     }
 
     if (lora_idle == true) {
         delay(1000);
         txNumber += 0.01;
-        sprintf(txpacket, "%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f:%0.2f",
-                dados.temperatureBME, dados.humidityDHT, dados.altitude,
+        sprintf(txpacket, "%.2f:%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f:%0.2f", dados.seconds,
+                dados.temperatureDHT, dados.humidityDHT, dados.altitude,
                 dados.latitude, dados.longitude,
                 dados.accelX, dados.accelY, dados.accelZ, txNumber);
 
@@ -280,4 +267,18 @@ void OnTxTimeout() {
     Radio.Sleep();
     Serial.println("TX Timeout......");
     lora_idle = true;
+}
+
+void printSensorsData(struct sensorsData dados) {
+    Serial.print(dados.seconds); Serial.print(":");
+    Serial.print(dados.temperatureDHT); Serial.print(":");
+    Serial.print(dados.humidityDHT); Serial.print(":");
+    Serial.print(dados.pressure); Serial.print(":");
+    Serial.print(dados.altitude); Serial.print(":");
+    Serial.print(dados.latitude); Serial.print(":");
+    Serial.print(dados.longitude); Serial.print(":");
+    Serial.print(dados.sats); Serial.print(":");
+    Serial.print(dados.accelX); Serial.print(":");
+    Serial.print(dados.accelY); Serial.print(":");
+    Serial.println(dados.accelZ);
 }
