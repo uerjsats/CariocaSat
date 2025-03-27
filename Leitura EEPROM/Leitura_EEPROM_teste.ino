@@ -46,12 +46,12 @@ template <class T> int EE24CXXX::read(unsigned int eeaddress, T& value) {
 }
 
 struct sensorsData {
-    float seconds;
+    int seconds;
 
     float temperature;
     float humidity;
     float pressure;
-    float altitude
+    float altitude;
 
     float latitude;
     float longitude;
@@ -77,22 +77,22 @@ void setup() {
         // Verifica se os dados lidos são inválidos (NaN ou todos os valores zerados)
         if (isnan(dados.temperature) && isnan(dados.humidity) &&
             isnan(dados.pressure) && isnan(dados.altitude) &&
-            isnan(dados.seconds) && isnan(dados.latitude) &&
-            isnan(dados.longitude) && isnan(dados.sats) &&
+            dados.seconds == -1 && isnan(dados.latitude) &&
+            isnan(dados.longitude) && dados.sats == -1 &&
             isnan(dados.accelX) && isnan(dados.accelY) && isnan(dados.accelZ)) {
         break;
         }
 
         Serial.print("Registro ");
         Serial.print(i);
-        Serial.print(" - Temp: ");
-        Serial.print(dados.temperatura);
-        Serial.print(" | Tempo: ");
-        Serial.print(dados.tempo);
+        Serial.print(" - Tempo: ");
+        Serial.print(dados.seconds);
+        Serial.print(" | Temperatura: ");
+        Serial.print(dados.temperature);
         Serial.print(" | Umidade: ");
-        Serial.print(dados.umidade);
+        Serial.print(dados.humidity);
         Serial.print(" | Pressão: ");
-        Serial.print(dados.pressao);
+        Serial.print(dados.pressure);
         Serial.print(" | Altitude: ");
         Serial.print(dados.altitude);
         Serial.print(" | Latitude: ");
