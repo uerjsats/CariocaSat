@@ -1,110 +1,38 @@
-#include "Arduino.h"
 #include "LoRaWan_APP.h"
+#include "Arduino.h"
 #include "HT_SSD1306Wire.h"
 
-// Configurações do LoRa
-#define RF_FREQUENCY           908000000 // Frequência em Hz (915 MHz)
-#define LORA_BANDWIDTH         0         // [0: 125 kHz]
-#define LORA_SPREADING_FACTOR  7         // [SF7..SF12]
-#define LORA_CODINGRATE        1         // [1: 4/5]
-#define LORA_PREAMBLE_LENGTH   8         // Preambulo para Tx e Rx
-#define LORA_SYMBOL_TIMEOUT    0         // Timeout em símbolos
-#define LORA_FIX_LENGTH_PAYLOAD_ON false
-#define LORA_IQ_INVERSION_ON   false
+#define RF_FREQUENCY                                908000000 // Hz
+#define TX_OUTPUT_POWER                             14        // dBm
+#define LORA_BANDWIDTH                              0         // 125 kHz
+#define LORA_SPREADING_FACTOR                       7         // [SF7..SF12]
+#define LORA_CODINGRATE                             1         // 4/5
+#define LORA_PREAMBLE_LENGTH                        8
+#define LORA_SYMBOL_TIMEOUT                         0
+#define LORA_FIX_LENGTH_PAYLOAD_ON                  false
+#define LORA_IQ_INVERSION_ON                        false
 
-// Tamanho do buffer
-#define BUFFER_SIZE            30 // Tamanho do payload esperado
+#define RX_TIMEOUT_VALUE                            1000
+#define BUFFER_SIZE                                 80  
 
-// Variáveis do LoRa
+char txpacket[BUFFER_SIZE];
 char rxpacket[BUFFER_SIZE];
-int16_t Rssi, rxSize;
 
-// Funções de evento do LoRa
 static RadioEvents_t RadioEvents;
-void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
+
+int16_t txNumber;
+int16_t rssi, rxSize;
+
+bool lora_idle = true;
+String inputString = ""; // Para guardar o que foi digitado no serial
 
 // Display OLED
 SSD1306Wire factory_display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
 
-void lora_init() {
-    // Inicializa o LoRa
-    Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
-    Rssi = 0;
-
-    // Define os eventos do LoRa
-    RadioEvents.RxDone = OnRxDone;
-
-    // Inicializa o rádio LoRa
-    Radio.Init(&RadioEvents);
-    Radio.SetChannel(RF_FREQUENCY);
-
-    // Configuração do LoRa para recepção
-    Radio.SetRxConfig(MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
-                      LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
-                      LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
-                      0, true, 0, 0, LORA_IQ_INVERSION_ON, true);
-
-    // Ativa o modo de recepção
-    Radio.Rx(0);
-    Serial.println("LoRa inicializado e aguardando pacotes...");
-}
-
-void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
-    // Copia os dados recebidos para o buffer e adiciona um terminador nulo
-    rxSize = size;
-    Rssi = rssi;
-    memcpy(rxpacket, payload, size);
-    rxpacket[size] = '\0';
-
-    // Verifica se o primeiro byte do payload é o endereço esperado (42)
-    if (payload[0] == 42) {  // Endereço correspondente ao transmissor
-        // Exibe os dados recebidos no Serial Monitor
-        Serial.println("\nPacote recebido do endereço 42:");
-        Serial.printf("Mensagem: %s\n", (char*)&payload[1]); // Ignora o primeiro byte (endereço)
-        Serial.printf("RSSI: %d dBm, Tamanho: %d bytes\n", Rssi, rxSize);
-
-        String displayMessage = "RSSI: " + String(Rssi) + " dBm \n Tamanho: " + String(rxSize) + " bytes";
-
-        // Exibe os dados no display OLED
-        factory_display.clear();
-        factory_display.drawString(0, 0, "Teste de Telemetria 01");
-        factory_display.drawString(0, 10, "Mensagem:");
-        factory_display.drawString(0, 30, String((char*)&payload[1]));
-        factory_display.drawString(0, 40, displayMessage);
-        factory_display.display();
-    } else {
-        // Ignora pacotes de outros endereços
-        Serial.printf("Mensagem ignorada (endereco %d desconhecido)\n", payload[0]);
-    }
-
-    // Volta para o modo de recepção
-    Radio.Rx(0);
-}
-
-void sendLoRaMessage(const char* message) {
-    Serial.println("Enviando mensagem via LoRa...");
-
-    // Configuração para transmissão
-    Radio.SetTxConfig(MODEM_LORA, 14, 0, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
-                      LORA_CODINGRATE, LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
-                      true, 0, 0, LORA_IQ_INVERSION_ON, 3000);
-
-    // Criando o pacote a ser enviado
-    uint8_t buffer[BUFFER_SIZE] = {42}; // Endereço do transmissor
-    strncpy((char*)&buffer[1], message, BUFFER_SIZE - 1);
-
-    // Envia o pacote
-    Radio.Send(buffer, strlen(message) + 1);
-    Serial.println("Mensagem enviada!");
-
-    // Após o envio, volta para modo de recepção
-    delay(1000); // Pequeno delay para evitar conflitos
-    Radio.Rx(0);
-}
 
 void setup() {
-    // Inicializa a comunicação serial
     Serial.begin(115200);
+    Mcu.begin(HELTEC_BOARD,SLOW_CLK_TPYE);
 
     // Previne falhas no barramento I2C
     Wire.begin(SDA_OLED, SCL_OLED);
@@ -115,10 +43,18 @@ void setup() {
     factory_display.display();
     factory_display.drawString(0, 0, "Iniciando...");
     factory_display.display();
+    
+    txNumber = 0;
+    rssi = 0;
 
-    // Inicializa o LoRa
-    lora_init();
-
+    RadioEvents.RxDone = OnRxDone;
+    Radio.Init(&RadioEvents);
+    Radio.SetChannel(RF_FREQUENCY);
+    Radio.SetRxConfig(MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
+                      LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
+                      LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
+                      0, true, 0, 0, LORA_IQ_INVERSION_ON, true);
+    
     // Mensagem inicial no display
     delay(1000);
     factory_display.clear();
@@ -127,17 +63,49 @@ void setup() {
 }
 
 void loop() {
-    // Processa interrupções do rádio
-    Radio.IrqProcess();
-
-    // Verifica entrada do monitor serial
-    if (Serial.available()) {
-        char input = Serial.read();
-        
-        sendLoRaMessage(input);
-        
+    // Verifica se recebeu algo no serial
+    while (Serial.available()) {
+        char inChar = (char)Serial.read();
+        if (inChar == '\n') {
+            inputString.trim(); 
+            if (inputString.length() > 0 && inputString.length() < BUFFER_SIZE) {
+                memset(txpacket, 0, BUFFER_SIZE); 
+                inputString.toCharArray(txpacket, BUFFER_SIZE);
+                Radio.Send((uint8_t *)txpacket, strlen(txpacket));
+                Serial.printf("Mensagem enviada via LoRa: \"%s\"\r\n", txpacket);
+                lora_idle = true;
+            }
+            inputString = ""; // Limpa para próxima entrada
+        } else {
+            inputString += inChar;
+        }
     }
 
-    // Evita que o watchdog reinicie o dispositivo
-    delay(10);
+    if (lora_idle) {
+        lora_idle = false;
+        Radio.Rx(0);
+    }
+
+    Radio.IrqProcess();
+}
+
+void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr) {
+    rssi = rssiValue;
+    rxSize = size;
+    memcpy(rxpacket, payload, size);
+    rxpacket[size] = '\0';
+    Radio.Sleep();
+
+    String displayMessage = String((char*)payload).substring(0, size);
+
+    // Debug via Serial (incluindo RSSI e tamanho)
+    Serial.printf("%s:%d:%d\n", displayMessage.c_str(), rssi, rxSize);
+
+    factory_display.clear();
+    factory_display.drawString(0, 0, "Telemetria IREC");
+    factory_display.drawString(0, 10, "Mensagem:");
+    factory_display.drawString(0, 20, displayMessage);
+    factory_display.display();
+    
+    lora_idle = true;
 }
