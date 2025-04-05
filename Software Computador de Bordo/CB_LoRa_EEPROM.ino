@@ -8,258 +8,291 @@
 #include "LoRaWan_APP.h"
 #include "Arduino.h"
 
+#define RF_FREQUENCY 908000000 // Hz
+#define TX_OUTPUT_POWER 5
 
-#define RF_FREQUENCY                                908000000 // Hz
+#define LORA_BANDWIDTH 0
+#define LORA_SPREADING_FACTOR 7
+#define LORA_CODINGRATE 1
+#define LORA_PREAMBLE_LENGTH 8
+#define LORA_SYMBOL_TIMEOUT 0
+#define LORA_FIX_LENGTH_PAYLOAD_ON false
+#define LORA_IQ_INVERSION_ON false
 
-#define TX_OUTPUT_POWER                             5        // dBm
+#define RX_TIMEOUT_VALUE 1000
+#define BUFFER_SIZE 64
 
-#define LORA_BANDWIDTH                              0         // [0: 125 kHz,
-                                                              //  1: 250 kHz,
-                                                              //  2: 500 kHz,
-                                                              //  3: Reserved]
-#define LORA_SPREADING_FACTOR                       7         // [SF7..SF12]
-#define LORA_CODINGRATE                             1         // [1: 4/5,
-                                                              //  2: 4/6,
-                                                              //  3: 4/7,
-                                                              //  4: 4/8]
-#define LORA_PREAMBLE_LENGTH                        8         // Same for Tx and Rx
-#define LORA_SYMBOL_TIMEOUT                         0         // Symbols
-#define LORA_FIX_LENGTH_PAYLOAD_ON                  false
-#define LORA_IQ_INVERSION_ON                        false
-
-
-#define RX_TIMEOUT_VALUE                            1000
-#define BUFFER_SIZE                                 44 // Define the payload size here
+#define MY_ADDRESS 43
+#define DEST_ADDRESS 42
 
 char txpacket[BUFFER_SIZE];
+char rxpacket[BUFFER_SIZE];
 
 double txNumber;
-
-bool lora_idle=true;
+bool lora_idle = true;
 
 static RadioEvents_t RadioEvents;
-void OnTxDone( void );
-void OnTxTimeout( void );
+void OnTxDone(void);
+void OnTxTimeout(void);
+void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr);  // ✅ ADICIONADA
 
-// Criar instância do GPS e da Serial2
 TinyGPSPlus gps;
 HardwareSerial gpsSerial(1);
 
 #define SEALEVELPRESSURE_HPA (1010)
-#define DHTPIN 48        // Pino onde o DHT22 está conectado
-#define DHTTYPE DHT22   // Define o tipo do sensor
-#define TIMEZONE_OFFSET -3  // Ajuste para horário de Brasília (UTC-3)
+#define DHTPIN 48
+#define DHTTYPE DHT22
+#define TIMEZONE_OFFSET -3
 
-Adafruit_BME280 bme; // Objeto do sensor BME280
-DHT dht(DHTPIN, DHTTYPE); // Objeto do sensor DHT22
-Adafruit_MPU6050 mpu; // Objeto do sensor MPU6050 (GY-521)
+Adafruit_BME280 bme;
+DHT dht(DHTPIN, DHTTYPE);
+Adafruit_MPU6050 mpu;
 
 unsigned long startTime;
-
+unsigned long lastTxTime = 0;
+const unsigned long txInterval = 5000; // envia a cada 5s
 
 class EE24CXXX {
-  private:
+private:
     byte _device_address;
-  public:
+
+public:
     EE24CXXX(byte device_address) : _device_address(device_address) {}
     void write(unsigned int eeaddress, unsigned char *data, unsigned int data_len);
     void read(unsigned int eeaddress, unsigned char *data, unsigned int data_len);
 
-    template <class T> int write(unsigned int eeaddress, const T &value);
-    template <class T> int read(unsigned int eeaddress, T &value);
+    template <class T>
+    int write(unsigned int eeaddress, const T &value);
+    template <class T>
+    int read(unsigned int eeaddress, T &value);
 };
 
 void EE24CXXX::write(unsigned int eeaddress, unsigned char *data, unsigned int data_len) {
-  while (data_len > 0) {
-    Wire.beginTransmission(_device_address);
-    Wire.write((int)(eeaddress >> 8));   // MSB
-    Wire.write((int)(eeaddress & 0xFF)); // LSB
+    while (data_len > 0) {
+        Wire.beginTransmission(_device_address);
+        Wire.write((int)(eeaddress >> 8));
+        Wire.write((int)(eeaddress & 0xFF));
 
-    byte bytesToWrite = min(data_len, (unsigned int)16); // Limita a 16 bytes por página
-    for (byte i = 0; i < bytesToWrite; i++) {
-      Wire.write(data[i]);
+        byte bytesToWrite = min(data_len, (unsigned int)16);
+        for (byte i = 0; i < bytesToWrite; i++) {
+            Wire.write(data[i]);
+        }
+
+        Wire.endTransmission();
+        eeaddress += bytesToWrite;
+        data += bytesToWrite;
+        data_len -= bytesToWrite;
+
+        delay(5);
     }
-
-    Wire.endTransmission();
-    eeaddress += bytesToWrite;
-    data += bytesToWrite;
-    data_len -= bytesToWrite;
-
-    delay(5); // Tempo de gravação da EEPROM
-  }
 }
 
 void EE24CXXX::read(unsigned int eeaddress, unsigned char *data, unsigned int data_len) {
-  while (data_len > 0) {
-    Wire.beginTransmission(_device_address);
-    Wire.write((int)(eeaddress >> 8));   // MSB
-    Wire.write((int)(eeaddress & 0xFF)); // LSB
-    Wire.endTransmission();
+    while (data_len > 0) {
+        Wire.beginTransmission(_device_address);
+        Wire.write((int)(eeaddress >> 8));
+        Wire.write((int)(eeaddress & 0xFF));
+        Wire.endTransmission();
 
-    byte bytesToRead = min(data_len, (unsigned int)28);
-    Wire.requestFrom(_device_address, bytesToRead);
+        byte bytesToRead = min(data_len, (unsigned int)28);
+        Wire.requestFrom(_device_address, bytesToRead);
 
-    for (byte i = 0; i < bytesToRead && Wire.available(); i++) {
-      data[i] = Wire.read();
+        for (byte i = 0; i < bytesToRead && Wire.available(); i++) {
+            data[i] = Wire.read();
+        }
+
+        data += bytesToRead;
+        eeaddress += bytesToRead;
+        data_len -= bytesToRead;
     }
-
-    data += bytesToRead;
-    eeaddress += bytesToRead;
-    data_len -= bytesToRead;
-  }
 }
 
 template <class T> int EE24CXXX::write(unsigned int eeaddress, const T &value) {
-  write(eeaddress, (unsigned char *)&value, sizeof(T));
-  return sizeof(T);
+    write(eeaddress, (unsigned char *)&value, sizeof(T));
+    return sizeof(T);
 }
 
 template <class T> int EE24CXXX::read(unsigned int eeaddress, T &value) {
-  read(eeaddress, (unsigned char *)&value, sizeof(T));
-  return sizeof(T);
+    read(eeaddress, (unsigned char *)&value, sizeof(T));
+    return sizeof(T);
 }
 
 EE24CXXX eeprom(0x50);
-int i = 0;
+int currentAddress = 0;
 
-struct dadosVoo {
-  float temperatura;
-  float tempo;
-  float umidade;
-  float pressao;
-  float altitude;
-  float latitude;
-  float longitude;
-  int sats;
-  float accelX;
-  float accelY;
-  float accelZ;
+struct sensorsData {
+    int seconds;
+    float temperatureDHT;
+    float humidityDHT;
+    float pressure;
+    float altitude;
+    float latitude;
+    float longitude;
+    int sats;
+    float accelX;
+    float accelY;
+    float accelZ;
 };
 
 void setup() {
-  Serial.begin(115200);
-  gpsSerial.begin(9600, SERIAL_8N1, 45, 46); // RX=45, TX=46
+    Serial.begin(115200);
+    gpsSerial.begin(9600, SERIAL_8N1, 45, 46);
 
-  if (!bme.begin(0x76)) {
-    Serial.println("Erro ao inicializar o BME280!");
-  }
+    if (!bme.begin(0x76)) {
+        Serial.println("Erro ao inicializar o BME280!");
+    }
 
-  dht.begin();
-  Wire.begin();
-  if (!mpu.begin()) {
-    Serial.println("Erro ao inicializar o MPU6050!");
-  }
+    dht.begin();
+    Wire.begin();
 
-  startTime = millis();
+    if (!mpu.begin()) {
+        Serial.println("Erro ao inicializar o MPU6050!");
+    }
 
-   Mcu.begin(HELTEC_BOARD,SLOW_CLK_TPYE);
-	
-    txNumber=0;
+    startTime = millis();
+
+    Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
+
+    txNumber = 0;
 
     RadioEvents.TxDone = OnTxDone;
+    RadioEvents.RxDone = OnRxDone;
     RadioEvents.TxTimeout = OnTxTimeout;
-    
-    Radio.Init( &RadioEvents );
-    Radio.SetChannel( RF_FREQUENCY );
-    Radio.SetTxConfig( MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
-                                   LORA_SPREADING_FACTOR, LORA_CODINGRATE,
-                                   LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
-                                   true, 0, 0, LORA_IQ_INVERSION_ON, 3000 );
+
+    Radio.Init(&RadioEvents);
+    Radio.SetChannel(RF_FREQUENCY);
+    Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
+                      LORA_SPREADING_FACTOR, LORA_CODINGRATE,
+                      LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
+                      true, 0, 0, LORA_IQ_INVERSION_ON, 3000);
+    Radio.SetRxConfig(MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
+                      LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
+                      LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
+                      0, true, 0, 0, LORA_IQ_INVERSION_ON, true);
+
+    Radio.Rx(0);
 
 }
 
 void loop() {
-  while (gpsSerial.available()) {
-    char c = gpsSerial.read();
-    gps.encode(c);
-  }
+    while (gpsSerial.available()) {
+        char c = gpsSerial.read();
+        gps.encode(c);
+    }
 
-  float tempBME = bme.readTemperature();
-  float pressao = bme.readPressure() / 100.0F;
-  float altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
-  float umidadeBME = bme.readHumidity();
+    Radio.IrqProcess();
 
-  float tempDHT = dht.readTemperature();
-  float humDHT = dht.readHumidity();
+    if (millis() - lastTxTime >= txInterval && lora_idle) {
+        sensorsData dados;
+        unsigned long elapsedTime = (millis() - startTime) / 1000;
+        dados.seconds = elapsedTime;
 
-  if (isnan(tempDHT) || isnan(humDHT)) {
-    tempDHT = 0.0;
-    humDHT = 0.0;
-  }
+        dados.temperatureDHT = dht.readTemperature();
+        if (isnan(dados.temperatureDHT)) dados.temperatureDHT = 0.0;
 
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
+        dados.humidityDHT = dht.readHumidity();
+        if (isnan(dados.humidityDHT)) dados.humidityDHT = 0.0;
 
-  unsigned long elapsedTime = (millis() - startTime) / 1000; // Converte milissegundos para segundos
+        dados.pressure = bme.readPressure() / 100.0F;
+        dados.altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+        dados.latitude = gps.location.lat();
+        dados.longitude = gps.location.lng();
+        dados.sats = gps.satellites.value();
 
-  dadosVoo voo;
-  voo.temperatura = tempBME;
-  voo.umidade = humDHT;
-  voo.tempo = elapsedTime;
-  voo.pressao = pressao;
-  voo.altitude = altitude;
-  voo.latitude = gps.location.lat();
-  voo.longitude = gps.location.lng();
-  voo.sats = gps.satellites.value();
-  voo.accelX = a.acceleration.x;
-  voo.accelY = a.acceleration.y;
-  voo.accelZ = a.acceleration.z;
+        sensors_event_t a, g, temp;
+        mpu.getEvent(&a, &g, &temp);
 
-  Serial.print(tempBME);
-  Serial.print(":");
-  Serial.print(humDHT);
-  Serial.print(":");
-  Serial.print(elapsedTime);
-  Serial.print(":");
-  Serial.print(pressao);
-  Serial.print(":");
-  Serial.print(altitude);
-  Serial.print(":");
-  Serial.print(gps.location.lat(), 6);
-  Serial.print(":");
-  Serial.print(gps.location.lng(), 6);
-  Serial.print(":");
-  Serial.print(gps.satellites.value());
-  Serial.print(":");
-  Serial.print(a.acceleration.x);
-  Serial.print(":");
-  Serial.print(a.acceleration.y);
-  Serial.print(":");
-  Serial.println(a.acceleration.z);
+        dados.accelX = a.acceleration.x;
+        dados.accelY = a.acceleration.y;
+        dados.accelZ = a.acceleration.z;
 
-  if (i >= 1484) 
-  {
-  i = 0; // Reseta após atingir a capacidade máxima
-  }
+        printSensorsData(dados);
 
-  eeprom.write(44 * i, voo);
-  i++;
+        if (currentAddress >= 1484) currentAddress = 0;
 
-  if(lora_idle == true)
-	{
-    delay(1000);
-		txNumber += 0.01;
-    sprintf(txpacket, "%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f:%0.2f",
-            tempBME, humDHT, altitude, gps.location.lat(), gps.location.lng(),
-            a.acceleration.x, a.acceleration.y, a.acceleration.z,txNumber);
+        eeprom.write(currentAddress, dados.seconds); currentAddress += 4;
+        eeprom.write(currentAddress, dados.temperatureDHT); currentAddress += 4;
+        eeprom.write(currentAddress, dados.humidityDHT); currentAddress += 4;
+        eeprom.write(currentAddress, dados.pressure); currentAddress += 4;
+        eeprom.write(currentAddress, dados.altitude); currentAddress += 4;
+        eeprom.write(currentAddress, dados.latitude); currentAddress += 4;
+        eeprom.write(currentAddress, dados.longitude); currentAddress += 4;
+        eeprom.write(currentAddress, dados.sats); currentAddress += 4;
+        eeprom.write(currentAddress, dados.accelX); currentAddress += 4;
+        eeprom.write(currentAddress, dados.accelY); currentAddress += 4;
+        eeprom.write(currentAddress, dados.accelZ); currentAddress += 4;
 
-		Radio.Send( (uint8_t *)txpacket, strlen(txpacket) ); //send the package out	
-    lora_idle = false;
-	}
-  Radio.IrqProcess( );
+        memset(txpacket, 0, BUFFER_SIZE);
+        txpacket[0] = MY_ADDRESS;
+        txpacket[1] = DEST_ADDRESS;
 
-  delay(2000); // Aguarda 2 segundos antes da próxima leitura
+        snprintf(&txpacket[2], BUFFER_SIZE - 2, "%.d:%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f",
+                 dados.seconds,
+                 dados.temperatureDHT, dados.humidityDHT, dados.altitude,
+                 dados.latitude, dados.longitude,
+                 dados.accelX, dados.accelY, dados.accelZ);
+
+        if (txpacket[1] == DEST_ADDRESS) {
+            Radio.Send((uint8_t *)txpacket, strlen((char *)txpacket));
+            Serial.printf("Enviado para %d: %s\n", DEST_ADDRESS, &txpacket[2]);
+            lora_idle = false;
+            lastTxTime = millis();
+        } else {
+            Serial.println("Destino inválido. Só posso enviar para o 42.");
+        }
+    }
 }
 
-void OnTxDone( void )
-{
-	Serial.println("TX done......");
-	lora_idle = true;
+void OnTxDone() {
+    Serial.println("TX done......");
+    lora_idle = true;
+    Radio.Rx(0);
 }
 
-void OnTxTimeout( void )
-{
-    Radio.Sleep( );
+void OnTxTimeout() {
+    Radio.Sleep();
     Serial.println("TX Timeout......");
     lora_idle = true;
+    Radio.Rx(0);
+}
+
+void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr) {
+    Serial.println("Chegou algo no RX!");
+    if (size < 2) return;
+
+    uint8_t sender = payload[0];
+    uint8_t receiver = payload[1];
+
+    Serial.printf("Recebido de %d para %d\n", sender, receiver);
+
+    if (receiver != MY_ADDRESS || sender != DEST_ADDRESS) {
+        lora_idle = true;
+        Radio.Rx(0);
+        return;
+    }
+
+    memset(rxpacket, 0, BUFFER_SIZE);
+    memcpy(rxpacket, &payload[2], size - 2);
+    rxpacket[size - 2] = '\0';
+    Radio.Sleep();
+
+    if (strcmp(rxpacket, "1") == 0) {
+        Serial.println("foi");
+    }
+
+    lora_idle = true;
+}
+
+void printSensorsData(struct sensorsData dados) {
+    Serial.print(dados.seconds); Serial.print(":");
+    Serial.print(dados.temperatureDHT); Serial.print(":");
+    Serial.print(dados.humidityDHT); Serial.print(":");
+    Serial.print(dados.pressure); Serial.print(":");
+    Serial.print(dados.altitude); Serial.print(":");
+    Serial.print(dados.latitude); Serial.print(":");
+    Serial.print(dados.longitude); Serial.print(":");
+    Serial.print(dados.sats); Serial.print(":");
+    Serial.print(dados.accelX); Serial.print(":");
+    Serial.print(dados.accelY); Serial.println(":");
+    Serial.println(dados.accelZ);
 }
