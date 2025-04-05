@@ -22,8 +22,8 @@
 #define RX_TIMEOUT_VALUE 1000
 #define BUFFER_SIZE 64
 
-#define MY_ADDRESS 43
-#define DEST_ADDRESS 42
+#define MY_ADDRESS 43 //Endereço do rádio do satélite
+#define DEST_ADDRESS 42 //Endereço da estação base
 
 char txpacket[BUFFER_SIZE];
 char rxpacket[BUFFER_SIZE];
@@ -34,7 +34,7 @@ bool lora_idle = true;
 static RadioEvents_t RadioEvents;
 void OnTxDone(void);
 void OnTxTimeout(void);
-void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr);  // ✅ ADICIONADA
+void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr);  
 
 TinyGPSPlus gps;
 HardwareSerial gpsSerial(1);
@@ -128,7 +128,6 @@ struct sensorsData {
     float altitude;
     float latitude;
     float longitude;
-    int sats;
     float accelX;
     float accelY;
     float accelZ;
@@ -181,33 +180,39 @@ void loop() {
     }
 
     Radio.IrqProcess();
-
+    
+    //Contador 
     if (millis() - lastTxTime >= txInterval && lora_idle) {
         sensorsData dados;
         unsigned long elapsedTime = (millis() - startTime) / 1000;
         dados.seconds = elapsedTime;
-
+        
+        //Dados DHT
         dados.temperatureDHT = dht.readTemperature();
         if (isnan(dados.temperatureDHT)) dados.temperatureDHT = 0.0;
-
         dados.humidityDHT = dht.readHumidity();
         if (isnan(dados.humidityDHT)) dados.humidityDHT = 0.0;
-
+        
+        //Dados do BME
         dados.pressure = bme.readPressure() / 100.0F;
         dados.altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+        
+        //Dados GPS
         dados.latitude = gps.location.lat();
         dados.longitude = gps.location.lng();
         dados.sats = gps.satellites.value();
 
         sensors_event_t a, g, temp;
         mpu.getEvent(&a, &g, &temp);
-
+        
+        //Dados GY
         dados.accelX = a.acceleration.x;
         dados.accelY = a.acceleration.y;
         dados.accelZ = a.acceleration.z;
 
         printSensorsData(dados);
-
+        
+        //Escrita na EEPROM
         if (currentAddress >= 1484) currentAddress = 0;
 
         eeprom.write(currentAddress, dados.seconds); currentAddress += 4;
@@ -217,7 +222,6 @@ void loop() {
         eeprom.write(currentAddress, dados.altitude); currentAddress += 4;
         eeprom.write(currentAddress, dados.latitude); currentAddress += 4;
         eeprom.write(currentAddress, dados.longitude); currentAddress += 4;
-        eeprom.write(currentAddress, dados.sats); currentAddress += 4;
         eeprom.write(currentAddress, dados.accelX); currentAddress += 4;
         eeprom.write(currentAddress, dados.accelY); currentAddress += 4;
         eeprom.write(currentAddress, dados.accelZ); currentAddress += 4;
@@ -225,21 +229,21 @@ void loop() {
         memset(txpacket, 0, BUFFER_SIZE);
         txpacket[0] = MY_ADDRESS;
         txpacket[1] = DEST_ADDRESS;
-
-        snprintf(&txpacket[2], BUFFER_SIZE - 2, "%.d:%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f",
+        
+        //Monta o pacote LoRa
+        snprintf(&txpacket[2], BUFFER_SIZE - 2, "%.d:%.2f:%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f",
                  dados.seconds,
-                 dados.temperatureDHT, dados.humidityDHT, dados.altitude,
+                 dados.temperatureDHT, dados.humidityDHT, dados.altitude, dados.pressure
                  dados.latitude, dados.longitude,
                  dados.accelX, dados.accelY, dados.accelZ);
-
+        
+        //Envia dados para estação base
         if (txpacket[1] == DEST_ADDRESS) {
             Radio.Send((uint8_t *)txpacket, strlen((char *)txpacket));
             Serial.printf("Enviado para %d: %s\n", DEST_ADDRESS, &txpacket[2]);
             lora_idle = false;
             lastTxTime = millis();
-        } else {
-            Serial.println("Destino inválido. Só posso enviar para o 42.");
-        }
+        } 
     }
 }
 
@@ -255,7 +259,7 @@ void OnTxTimeout() {
     lora_idle = true;
     Radio.Rx(0);
 }
-
+//Recebe Telecomando
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr) {
     Serial.println("Chegou algo no RX!");
     if (size < 2) return;
