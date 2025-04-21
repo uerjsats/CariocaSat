@@ -53,6 +53,8 @@ unsigned long startTime;
 unsigned long lastTxTime = 0;
 const unsigned long txInterval = 5000; // envia a cada 5s
 
+String powerSupplyData = " ";
+
 class EE24CXXX {
 private:
     byte _device_address;
@@ -176,7 +178,7 @@ void setup() {
 
 void loop() {
     if(Serial.available()) {
-        String receivedData = Serial.readStringUntil("\n");
+        String receivedData = Serial.readStringUntil('\n');
         if (receivedData != "1") {
             powerSupplyData = receivedData;
         } 
