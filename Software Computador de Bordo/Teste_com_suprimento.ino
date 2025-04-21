@@ -40,7 +40,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr);
 TinyGPSPlus gps;
 HardwareSerial gpsSerial(1);
 
-#define SEALEVELPRESSURE_HPA (1010)
+#define SEALEVELPRESSURE_HPA (1012.2)
 #define DHTPIN 48
 #define DHTTYPE DHT22
 #define TIMEZONE_OFFSET -3
