@@ -39,6 +39,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr);
 
 TinyGPSPlus gps;
 HardwareSerial gpsSerial(1);
+HardwareSerial cncSerial(2);
 
 #define SEALEVELPRESSURE_HPA (1012.2)
 #define DHTPIN 48
@@ -140,6 +141,7 @@ struct sensorsData {
 void setup() {
     Serial.begin(115200);
     gpsSerial.begin(9600, SERIAL_8N1, 45, 46);
+    cncSerial.begin(115200,SERIAL_8N1, 20,19);
 
     if (!bme.begin(0x76)) {
         Serial.println("Erro ao inicializar o BME280!");
@@ -291,8 +293,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr) {
     Radio.Sleep();
 
     if (strcmp(rxpacket, "1") == 0) {
-        Serial.println("G1 X0 Y0 Z0");
-        Serial.println("G1 X100 Y100 Z100 F50");
+        cncSerial.println("G1 X0 Y0 Z0");
+        cncSerial.println("G1 X100 Y100 Z100 F50");
     }
 
     lora_idle = true;
