@@ -128,6 +128,7 @@ struct sensorsData {
     float temperatureDHT;
     float humidityDHT;
     float pressure;
+    int sats;
     float altitude;
     float latitude;
     float longitude;
@@ -212,6 +213,7 @@ void loop() {
         //Dados GPS
         dados.latitude = gps.location.lat();
         dados.longitude = gps.location.lng();
+        dados.sats = gps.satellites.value();
 
         sensors_event_t a, g, temp;
         mpu.getEvent(&a, &g, &temp);
@@ -247,7 +249,7 @@ void loop() {
         snprintf(&txpacket[2], BUFFER_SIZE - 2, "%u:%.2f:%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f:%s",
                  dados.seconds, dados.temperatureDHT,
                  dados.humidityDHT, dados.altitude,
-                 dados.pressure, dados.latitude, dados.longitude,
+                 dados.pressure, dados.sats, dados.latitude, dados.longitude,
                  dados.accelX, dados.accelY, dados.accelZ, powerSupplyData.c_str());
         
         //Envia dados para estação base
