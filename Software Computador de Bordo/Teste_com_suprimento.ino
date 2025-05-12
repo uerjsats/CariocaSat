@@ -248,7 +248,7 @@ void loop() {
         txpacket[1] = DEST_ADDRESS;
         
         //Monta o pacote LoRa
-        snprintf(&txpacket[2], BUFFER_SIZE - 2, "%u:%.2f:%.2f:%.2f:%.2f:%.6f:%.6f:%.2f:%.2f:%.2f:%s",
+        snprintf(&txpacket[2], BUFFER_SIZE - 2, "%u:%.2f:%.2f:%.2f:%.2f:%d:%.6f:%.6f:%.2f:%.2f:%.2f:%s",
                  dados.seconds, dados.temperatureDHT,
                  dados.humidityDHT, dados.altitude,
                  dados.pressure, dados.sats, dados.latitude, dados.longitude,
