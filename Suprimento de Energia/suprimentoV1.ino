@@ -1,13 +1,14 @@
 #include <Wire.h>
 #include <DallasTemperature.h>
+#include <OneWire.h>
 #include <Adafruit_INA219.h>
+#include <Servo.h>
 
-// Definir pinos dos sensores DS18B20
+// ---------- DS18B20 ----------
 #define DS18B20_1_PIN 2
 #define DS18B20_2_PIN 3
 #define DS18B20_3_PIN 4
 
-// Inicializa o OneWire e DallasTemperature para cada sensor em pinos diferentes
 OneWire oneWire1(DS18B20_1_PIN);
 DallasTemperature sensor1(&oneWire1);
 
@@ -17,48 +18,61 @@ DallasTemperature sensor2(&oneWire2);
 OneWire oneWire3(DS18B20_3_PIN);
 DallasTemperature sensor3(&oneWire3);
 
+// ---------- INA219 ----------
 Adafruit_INA219 ina219;
 
-unsigned long tempoInicial = 0;
-bool comandoRecebido = false;
+// ---------- ESC (Servo) ----------
+Servo esc;
+int motorPin = 11;
+int velocidadeMicrossegundos = 1000;
+int valorPotenciometroSimulado = 0;
 
 void setup() {
-  Serial.begin(9600);
-  
-  // Inicializa os sensores DS18B20
+  Serial.begin(115200);
+
+  // Inicializa ESC
+  esc.attach(motorPin);
+  esc.writeMicroseconds(1000);
+  delay(5000);  // Tempo para o ESC inicializar
+
+  // Inicializa sensores
   sensor1.begin();
   sensor2.begin();
   sensor3.begin();
 
-  // Inicializa o INA219
   if (!ina219.begin()) {
     Serial.println("Falha ao encontrar INA219!");
-    while (1) { delay(10); }
-  } 
+    while (1) delay(10);
+  }
 
-  // Calibra o INA219 para leituras mais precisas (padrão para 32 V, 2A)
   ina219.setCalibration_32V_2A();
 }
 
 void loop() {
-  
-  // Ler a tensão do barramento em volts
-  float busVoltage = ina219.getBusVoltage_V();
-  // Ler a corrente em miliamperes
-  float current_mA = ina219.getCurrent_mA();
+  // ---------- Controle do ESC via Serial ----------
+  if (Serial.available() > 0) {
+    valorPotenciometroSimulado = Serial.parseInt();
+    if (valorPotenciometroSimulado >= 0 && valorPotenciometroSimulado <= 100) {
+      velocidadeMicrossegundos = map(valorPotenciometroSimulado, 0, 100, 1000, 2000);
+      esc.writeMicroseconds(velocidadeMicrossegundos);
+    }
+    while (Serial.available() > 0) Serial.read();  // Limpa buffer
+  }
 
-  // Lê a Temperatura dos sensores
+  // ---------- Leitura dos sensores ----------
+  float busVoltage = ina219.getBusVoltage_V();
   sensor1.requestTemperatures();
   sensor2.requestTemperatures();
   sensor3.requestTemperatures();
+  float temp1 = sensor1.getTempCByIndex(0);
+  float temp2 = sensor2.getTempCByIndex(0);
+  float temp3 = sensor3.getTempCByIndex(0);
 
-  float tempbateria1 = sensor1.getTempCByIndex(0);
-  float tempbateria2 = sensor2.getTempCByIndex(0);
-  float tempbateria3 = sensor3.getTempCByIndex(0);
-  
-  Serial.println(String(busVoltage) + ":"+ String(current_mA) + ":" + String(tempbateria1) + ":" + String(tempbateria2) + ":" + String(tempbateria3));
-  
+  // ---------- Envio Serial ----------
+  Serial.print(temp1); Serial.print(":");
+  Serial.print(temp2); Serial.print(":");
+  Serial.print(temp3); Serial.print(":");
+  Serial.println(busVoltage);
 
-  delay(1000); // Aguarda 1 segundo antes de ler novamente
+  delay(2000);
 }
-
