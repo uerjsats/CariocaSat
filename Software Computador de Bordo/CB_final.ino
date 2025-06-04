@@ -41,7 +41,7 @@ TinyGPSPlus gps;
 HardwareSerial gpsSerial(1);
 HardwareSerial cncSerial(2);
 
-#define SEALEVELPRESSURE_HPA (1012.2)
+#define SEALEVELPRESSURE_HPA (990.2)
 #define DHTPIN 48
 #define DHTTYPE DHT22
 #define TIMEZONE_OFFSET -3
@@ -229,7 +229,7 @@ void loop() {
         
         // Escrita na EEPROM
         // Só irão ser escritos de 20 em 20 bytes, e irá cessar no máximo da memoria (1484 bytes)
-        if (currentAddress <= 1480) {
+        if ((currentAddress <= 1480) && (dados.altitude >= 200.00)) {
 
           // float 4 bytes -> float 2 bytes
           eeprom.write(currentAddress, float16(dados.seconds)); currentAddress += 2;
