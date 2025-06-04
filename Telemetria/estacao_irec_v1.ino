@@ -6,7 +6,7 @@
 #define MY_ADDRESS 42
 #define DEST_ADDRESS 43
 
-#define RF_FREQUENCY                                908000000 // Hz
+#define RF_FREQUENCY                                913600000 // Hz
 #define TX_OUTPUT_POWER                             14        // dBm
 #define LORA_BANDWIDTH                              0         // 125 kHz
 #define LORA_SPREADING_FACTOR                       7         // [SF7..SF12]
@@ -17,7 +17,7 @@
 #define LORA_IQ_INVERSION_ON                        false
 
 #define RX_TIMEOUT_VALUE                            1000
-#define BUFFER_SIZE                                 80  
+#define BUFFER_SIZE                                 300  
 
 char txpacket[BUFFER_SIZE];
 char rxpacket[BUFFER_SIZE];
