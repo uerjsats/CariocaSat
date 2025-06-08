@@ -256,8 +256,6 @@ void loop() {
                  dados.pressure, dados.sats, dados.latitude, dados.longitude,
                  dados.accelX, dados.accelY, dados.accelZ, powerSupplyData.c_str());
         
-        Serial.println(&txpacket[2]);
-        
         //Envia dados para estação base
         if (txpacket[1] == DEST_ADDRESS) {
             Radio.Send((uint8_t *)txpacket, strlen((char *)txpacket));
@@ -301,7 +299,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr) {
         cncSerial.println("G92 X0 Y0 Z0");
         cncSerial.println("G1 X5 F30");
         cncSerial.println("G1 Y5 F30");
-        cncSerial.println("G1 Z2 F30");
+        cncSerial.println("G1 Z2 F30");   
     }
 
     lora_idle = true;
