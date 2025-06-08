@@ -33,7 +33,7 @@ void setup() {
   // Inicializa ESC
   esc.attach(motorPin);
   esc.writeMicroseconds(1000);
-  delay(5000);  // Tempo para o ESC inicializar
+  delay(10000);  // Tempo para o ESC inicializar
 
   // Inicializa sensores
   sensor1.begin();
@@ -61,6 +61,7 @@ void loop() {
 
   // ---------- Leitura dos sensores ----------
   float busVoltage = ina219.getBusVoltage_V();
+  float current = ina219.getCurrent_mA();
   sensor1.requestTemperatures();
   sensor2.requestTemperatures();
   sensor3.requestTemperatures();
