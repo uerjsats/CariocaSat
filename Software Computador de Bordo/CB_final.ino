@@ -297,11 +297,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssiValue, int8_t snr) {
     Radio.Sleep();
 
     if (strcmp(rxpacket, "1") == 0) {
-        cncSerial.println("$H);
+        cncSerial.println("$H");
         cncSerial.println("G92 X0 Y0 Z0");
         cncSerial.println("G1 X5 F30");
-        cncSerial.println("G1 Y5 F30);
-        cncSerial.println("G1 Z2 F30);
+        cncSerial.println("G1 Y5 F30");
+        cncSerial.println("G1 Z2 F30");
     }
 
     lora_idle = true;
